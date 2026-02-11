@@ -29,6 +29,7 @@
       text-align: center;
       box-shadow: 0 0 40px rgba(0, 0, 0, 0.8);
       transition: opacity 1.5s ease;
+      pointer-events: auto;
     }
 
     h1 {
@@ -86,6 +87,23 @@
       z-index: 1;
       filter: grayscale(1) contrast(1.1) brightness(1.2);
     }
+
+    @media (max-width: 768px) {
+      #container {
+        padding: 28px 24px;
+        min-width: auto;
+        width: 85vw;
+      }
+
+      h1 {
+        font-size: 1em;
+      }
+
+      button {
+        width: 100%;
+        margin: 6px 0;
+      }
+    }
   </style>
 </head>
 <body>
@@ -127,15 +145,43 @@
       window.__visualEnergy =
         window.__visualEnergy * 0.9 + v * 0.1;
     }
-    // auto-hide interface after 15s
-    setTimeout(() => {
+    let uiHidden = false;
+
+    function hideUI() {
       const ui = document.getElementById('container');
-      if (ui) {
-        ui.style.transition = 'opacity 1.5s ease';
-        ui.style.opacity = '0';
-        ui.style.pointerEvents = 'none';
+      if (!ui) return;
+
+      ui.style.transition = 'opacity 1.5s ease';
+      ui.style.opacity = '0';
+      ui.style.pointerEvents = 'none';
+      uiHidden = true;
+    }
+
+    function showUI() {
+      const ui = document.getElementById('container');
+      if (!ui) return;
+
+      ui.style.transition = 'opacity 0.6s ease';
+      ui.style.opacity = '1';
+      ui.style.pointerEvents = 'auto';
+      uiHidden = false;
+    }
+
+    // auto-hide after 15s
+    setTimeout(hideUI, 15000);
+
+    // tap anywhere to toggle UI (mobile)
+    document.addEventListener('touchstart', () => {
+      if (uiHidden) {
+        showUI();
       }
-    }, 15000);
+    });
+
+    document.addEventListener('click', () => {
+      if (uiHidden) {
+        showUI();
+      }
+    });
     // Визуализация (WebGL Audio-Reactive Shader)
     const canvas = document.getElementById('visual');
     const gl = canvas.getContext('webgl');
@@ -645,7 +691,16 @@ gl_FragColor = vec4(vec3(paint),0.22);
       }
     }
 
-    let generator = null;
+let generator = null;
+
+function unlockAudio() {
+  if (generator && generator.audioContext && generator.audioContext.state === 'suspended') {
+    generator.audioContext.resume();
+  }
+}
+
+document.addEventListener('touchstart', unlockAudio, { once: true });
+document.addEventListener('click', unlockAudio, { once: true });
 
     function init() {
       generator = new FractalMusicGenerator();
@@ -657,7 +712,14 @@ gl_FragColor = vec4(vec3(paint),0.22);
 
     function start() {
       if (!generator) init();
+
+      // wake audio on mobile
+      if (generator.audioContext && generator.audioContext.state === 'suspended') {
+        generator.audioContext.resume();
+      }
+
       generator.play();
+      setTimeout(hideUI, 2000);
       document.getElementById('status').textContent = 'квантовый коллапс активен';
     }
 
