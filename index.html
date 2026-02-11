@@ -432,8 +432,12 @@ void main(){
         const micro = (Math.random() - 0.5) * 15 * visual;
         const tempered = freq * Math.pow(2, micro / 1200);
 
-        const waveforms = ['sine', 'triangle', 'sawtooth'];
+        // waveform selection + detune
+        const waveforms = ['sine','triangle','sawtooth','square'];
         osc.type = waveforms[Math.floor(Math.random() * waveforms.length)];
+
+        // random detune for texture
+        osc.detune.value = (Math.random()-0.5) * 25;
         osc.frequency.value = tempered;
 
         const sub = ctx.createOscillator();
@@ -441,21 +445,25 @@ void main(){
         sub.frequency.value = tempered * 0.5;
 
         const subGain = ctx.createGain();
-        subGain.gain.value = 0.25 + visual * 0.2;
+        subGain.gain.value = 0.18 + visual * 0.35;
 
         const overtone = ctx.createOscillator();
         overtone.type = 'sine';
         overtone.frequency.value = tempered * (0.6 + visual * 0.5);
 
         const overtoneGain = ctx.createGain();
-        overtoneGain.gain.value = 0.07 * (1.0 + visual);
+        overtoneGain.gain.value = 0.05 + Math.random()*0.12 * (1.0 + visual);
 
         const noise = ctx.createBufferSource();
         const buffer = ctx.createBuffer(1, ctx.sampleRate * 0.3, ctx.sampleRate);
         const data = buffer.getChannelData(0);
 
         for (let i = 0; i < data.length; i++) {
-          data[i] = (Math.random() * 2 - 1) * 0.15;
+          // hybrid noise: white + brown
+          const white = Math.random()*2-1;
+          const prev = i>0 ? data[i-1] : 0;
+          const brown = (prev + white*0.02) / 1.02;
+          data[i] = (white*0.6 + brown*0.4) * 0.2;
         }
 
         noise.buffer = buffer;
@@ -464,10 +472,10 @@ void main(){
         const grainGain = ctx.createGain();
         grainGain.gain.value = 0.05 + visual * 0.08;
 
-        const attack = 0.05 + Math.random() * 0.15;
-        const decay = 0.2 + Math.random() * 0.4;
-        const sustain = 0.25 + visual * 0.25;
-        const release = 0.3 + Math.random() * 0.4;
+        const attack = 0.01 + Math.random() * 0.25;
+        const decay = 0.1 + Math.random() * 0.6;
+        const sustain = 0.15 + visual * 0.35;
+        const release = 0.2 + Math.random() * 0.9;
 
         gain.gain.setValueAtTime(0, startTime);
         gain.gain.linearRampToValueAtTime(0.4, startTime + attack);
@@ -495,16 +503,38 @@ void main(){
         noise.connect(grainGain);
         grainGain.connect(gain);
 
+        // distortion / saturation
+        const shaper = ctx.createWaveShaper();
+        const curve = new Float32Array(256);
+        const drive = 1 + Math.random()*4;
+        for (let i = 0; i < 256; i++) {
+          const x = i * 2 / 255 - 1;
+          curve[i] = Math.tanh(x * drive);
+        }
+        shaper.curve = curve;
+        shaper.oversample = '2x';
+
         const filter = ctx.createBiquadFilter();
-        filter.type = 'lowpass';
-        filter.frequency.setValueAtTime(800, startTime);
-        filter.Q.value = 1.1;
+
+        const filterTypes = [
+          'lowpass','highpass','bandpass','notch'
+        ];
+
+        filter.type =
+          filterTypes[Math.floor(Math.random()*filterTypes.length)];
+
+        filter.frequency.setValueAtTime(
+          400 + Math.random()*2400,
+          startTime
+        );
+
+        filter.Q.value = 0.4 + Math.random()*6.0;
 
         const delay = ctx.createDelay();
-        delay.delayTime.value = 0.22 + Math.random() * 0.18;
+        delay.delayTime.value = 0.08 + Math.random() * 0.45;
 
         const tapeFeedback = ctx.createGain();
-        tapeFeedback.gain.value = 0.45 + visual * 0.25;
+        tapeFeedback.gain.value = 0.3 + Math.random()*0.4 + visual*0.2;
 
         const tapeFilter = ctx.createBiquadFilter();
         tapeFilter.type = 'lowpass';
@@ -522,7 +552,8 @@ void main(){
         const dry = ctx.createGain();
         dry.gain.value = 0.65;
 
-        gain.connect(filter);
+        gain.connect(shaper);
+        shaper.connect(filter);
 
         filter.connect(dry);
         dry.connect(ctx.destination);
