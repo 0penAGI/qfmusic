@@ -363,7 +363,7 @@ void main(){
         this.energy = 1.0;
 
         this.activeVoices = new Set(); // track playing sounds
-        this.maxVoices = 24; // hard polyphony limit
+        this.maxVoices = 18; // softer polyphony = less harshness
         this.initQuantumField();
       }
       
@@ -472,23 +472,33 @@ void main(){
         const grainGain = ctx.createGain();
         grainGain.gain.value = 0.05 + visual * 0.08;
 
-        const attack = 0.01 + Math.random() * 0.25;
-        const decay = 0.1 + Math.random() * 0.6;
-        const sustain = 0.15 + visual * 0.35;
-        const release = 0.2 + Math.random() * 0.9;
+        // smoother ADSR
+        const attack = 0.08 + Math.random() * 0.25;
+        const decay = 0.3 + Math.random() * 0.6;
+        const sustain = 0.18 + visual * 0.25;
+        const release = 0.6 + Math.random() * 1.2;
 
-        gain.gain.setValueAtTime(0, startTime);
-        gain.gain.linearRampToValueAtTime(0.4, startTime + attack);
-        gain.gain.linearRampToValueAtTime(
-          sustain,
+        // soft exponential envelope
+        gain.gain.cancelScheduledValues(startTime);
+        gain.gain.setValueAtTime(0.0001, startTime);
+
+        gain.gain.exponentialRampToValueAtTime(
+          0.35,
+          startTime + attack
+        );
+
+        gain.gain.exponentialRampToValueAtTime(
+          Math.max(sustain, 0.05),
           startTime + attack + decay
         );
+
         gain.gain.setValueAtTime(
-          sustain,
+          Math.max(sustain, 0.05),
           startTime + duration - release
         );
-        gain.gain.linearRampToValueAtTime(
-          0,
+
+        gain.gain.exponentialRampToValueAtTime(
+          0.0001,
           startTime + duration
         );
 
@@ -514,21 +524,22 @@ void main(){
         shaper.curve = curve;
         shaper.oversample = '2x';
 
+        // main tone-shaping filter (mostly lowpass)
         const filter = ctx.createBiquadFilter();
 
         const filterTypes = [
-          'lowpass','highpass','bandpass','notch'
+          'lowpass','bandpass','notch'
         ];
 
         filter.type =
           filterTypes[Math.floor(Math.random()*filterTypes.length)];
 
         filter.frequency.setValueAtTime(
-          400 + Math.random()*2400,
+          600 + Math.random()*1400 + visual*600,
           startTime
         );
 
-        filter.Q.value = 0.4 + Math.random()*6.0;
+        filter.Q.value = 0.6 + Math.random()*3.5;
 
         const delay = ctx.createDelay();
         delay.delayTime.value = 0.08 + Math.random() * 0.45;
@@ -552,7 +563,14 @@ void main(){
         const dry = ctx.createGain();
         dry.gain.value = 0.65;
 
-        gain.connect(shaper);
+        // global high-cut safety filter
+        const highCut = ctx.createBiquadFilter();
+        highCut.type = 'lowpass';
+        highCut.frequency.value = 1800;
+        highCut.Q.value = 0.7;
+
+        gain.connect(highCut);
+        highCut.connect(shaper);
         shaper.connect(filter);
 
         filter.connect(dry);
