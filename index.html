@@ -619,13 +619,25 @@ void main(){
           this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
         }
 
-        // КРИТИЧНО для iOS
-        this.audioContext.resume().then(() => {
-          console.log('AudioContext resumed');
-        });
+        // mobile unlock pulse
+        const osc = this.audioContext.createOscillator();
+        const gain = this.audioContext.createGain();
+        gain.gain.value = 0.0001;
+        osc.connect(gain);
+        gain.connect(this.audioContext.destination);
+        osc.start();
+        osc.stop(this.audioContext.currentTime + 0.02);
 
-        this.isPlaying = true;
-        this.generate();
+        this.audioContext.resume().then(() => {
+          this.isPlaying = true;
+
+          // small warmup before generate
+          setTimeout(() => {
+            if (this.isPlaying) {
+              this.generate();
+            }
+          }, 80);
+        });
       }
       
       generate() {
@@ -742,6 +754,7 @@ void main(){
       
       stop() {
         this.isPlaying = false;
+        this.time = 0;
 
         // hard cleanup
         this.activeVoices.forEach(v => {
@@ -771,16 +784,10 @@ void main(){
 
     // Кнопки
     document.getElementById('startBtn').addEventListener('click', function() {
-      if (!generator.audioContext) {
-        generator.audioContext = new (window.AudioContext || window.webkitAudioContext)();
-      }
-      
-      generator.audioContext.resume().then(() => {
-        generator.play();
-        showUI();
-        setTimeout(hideUI, 4000);
-        document.getElementById('status').textContent = 'квантовый коллапс активен';
-      });
+      generator.play();
+      showUI();
+      setTimeout(hideUI, 4000);
+      document.getElementById('status').textContent = 'квантовый коллапс активен';
     });
 
     document.getElementById('stopBtn').addEventListener('click', function() {
