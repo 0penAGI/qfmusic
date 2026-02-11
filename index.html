@@ -2,6 +2,7 @@
 <html>
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
   <style>
     body {
       margin: 0;
@@ -30,7 +31,10 @@
       box-shadow: 0 0 40px rgba(0, 0, 0, 0.8);
       transition: opacity 1.5s ease;
       pointer-events: auto;
+      touch-action: manipulation;
     }
+
+    
 
     h1 {
       font-size: 1.3em;
@@ -85,6 +89,7 @@
       top: 0;
       left: 0;
       z-index: 1;
+      pointer-events: none;
       filter: grayscale(1) contrast(1.1) brightness(1.2);
     }
 
@@ -108,7 +113,7 @@
 </head>
 <body>
   <canvas id="visual"></canvas>
-  <div id="container">
+  <div id="container" ontouchstart="showUI()">
     <h1>∿ квантовая фрактальная музыка ∿</h1>
     <div>
       <button onclick="start()">коллапс</button>
@@ -699,8 +704,8 @@ function unlockAudio() {
   }
 }
 
-document.addEventListener('touchstart', unlockAudio, { once: true });
-document.addEventListener('click', unlockAudio, { once: true });
+document.addEventListener('touchstart', unlockAudio);
+document.addEventListener('click', unlockAudio);
 
     function init() {
       generator = new FractalMusicGenerator();
@@ -713,13 +718,16 @@ document.addEventListener('click', unlockAudio, { once: true });
     function start() {
       if (!generator) init();
 
-      // wake audio on mobile
-      if (generator.audioContext && generator.audioContext.state === 'suspended') {
-        generator.audioContext.resume();
+      // mobile-safe audio unlock
+      if (generator.audioContext && generator.audioContext.state !== 'running') {
+        generator.audioContext.resume().catch(()=>{});
       }
 
       generator.play();
-      setTimeout(hideUI, 2000);
+
+      showUI();
+      setTimeout(hideUI, 4000);
+
       document.getElementById('status').textContent = 'квантовый коллапс активен';
     }
 
@@ -736,6 +744,14 @@ document.addEventListener('click', unlockAudio, { once: true });
       }
       init();
     }
+    // fix mobile resize / rotation (inside script scope)
+    window.addEventListener('resize', () => {
+      if (!canvas || !gl) return;
+
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+      gl.viewport(0, 0, canvas.width, canvas.height);
+    });
   </script>
 </body>
 </html>
