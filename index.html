@@ -445,14 +445,14 @@ void main(){
         sub.frequency.value = tempered * 0.5;
 
         const subGain = ctx.createGain();
-        subGain.gain.value = 0.18 + visual * 0.35;
+        subGain.gain.value = 0.08 + visual * 0.2;
 
         const overtone = ctx.createOscillator();
         overtone.type = 'sine';
         overtone.frequency.value = tempered * (0.6 + visual * 0.5);
 
         const overtoneGain = ctx.createGain();
-        overtoneGain.gain.value = 0.05 + Math.random()*0.12 * (1.0 + visual);
+        overtoneGain.gain.value = 0.03 + Math.random()*0.06 * (1.0 + visual);
 
         const noise = ctx.createBufferSource();
         const buffer = ctx.createBuffer(1, ctx.sampleRate * 0.3, ctx.sampleRate);
@@ -470,18 +470,21 @@ void main(){
         noise.loop = true;
 
         const grainGain = ctx.createGain();
-        grainGain.gain.value = 0.05 + visual * 0.08;
+        grainGain.gain.value = 0.02 + visual * 0.04;
 
-        // --- NEW: Mobile-safe ADSR envelope ---
-        const amp = 0.35;
+        // --- Articulated ADSR envelope (non-droning) ---
+        const amp = 0.16;
         const now = this.audioContext.currentTime;
+
         // reset gain
         gain.gain.cancelScheduledValues(now);
         gain.gain.setValueAtTime(0.0001, now);
-        // ADSR (safe for mobile)
-        gain.gain.linearRampToValueAtTime(amp, now + 0.15);        // Attack
-        gain.gain.linearRampToValueAtTime(amp * 0.7, now + 0.4);   // Decay/Sustain
-        gain.gain.linearRampToValueAtTime(0.0001, now + duration); // Release
+
+        // ADSR (articulated / non-droning)
+        gain.gain.linearRampToValueAtTime(amp, now + 0.04);          // Fast attack
+        gain.gain.linearRampToValueAtTime(amp * 0.45, now + 0.18);   // Short decay
+        gain.gain.setValueAtTime(amp * 0.4, now + duration * 0.6);   // Low sustain
+        gain.gain.linearRampToValueAtTime(0.0001, now + duration);  // Clean release
         // --- END ADSR ---
 
         osc.connect(gain);
@@ -648,7 +651,7 @@ void main(){
         const duration = 0.6 + Math.random() * 1.5;
         this.createOscillator(activeNode.freq, duration, now + 0.05);
 
-        let localEnergy = Math.abs(resonance);
+        let localEnergy = Math.abs(resonance) * 0.6;
 
         activeNode.entangled.forEach(entangled => {
           if (entangled.alive && Math.random() > 0.3) {
