@@ -353,8 +353,11 @@ void main(){
         this.isPlaying = false;
         this.time = 0;
         this.memory = [];
-        this.maxMemory = 128;
+        this.maxMemory = 64; // smaller memory = faster forgetting
         this.energy = 1.0;
+
+        this.activeVoices = new Set(); // track playing sounds
+        this.maxVoices = 24; // hard polyphony limit
         this.initQuantumField();
       }
       
@@ -405,6 +408,14 @@ void main(){
       createOscillator(freq, duration, startTime) {
         if (!this.audioContext) return;
         
+        if (this.activeVoices.size > this.maxVoices) {
+          // kill oldest voice
+          const old = this.activeVoices.values().next().value;
+          if (old) {
+            try { old.stop(); } catch(e){}
+            this.activeVoices.delete(old);
+          }
+        }
         const osc = this.audioContext.createOscillator();
         const gain = this.audioContext.createGain();
 
@@ -523,6 +534,12 @@ void main(){
 
         verbDelay.connect(ctx.destination);
 
+        this.activeVoices.add(osc);
+
+        osc.onended = () => {
+          this.activeVoices.delete(osc);
+        };
+
         osc.start(startTime);
         sub.start(startTime);
         overtone.start(startTime);
@@ -589,14 +606,25 @@ void main(){
         this.memory.push({
           node: activeNode,
           energy: localEnergy,
-          time: this.time
+          time: this.time,
+          decay: 1.0
         });
 
+        this.memory = this.memory
+          .map(m => {
+            m.decay *= 0.96; // exponential forgetting
+            return m;
+          })
+          .filter(m => m.decay > 0.15);
+
         if (this.memory.length > this.maxMemory) {
-          this.memory.shift();
+          this.memory.length = this.maxMemory;
         }
 
-        this.energy = this.energy * 0.95 + localEnergy * 0.05;
+        this.energy =
+          this.energy * 0.9 +
+          localEnergy * 0.08 +
+          Math.random() * 0.02; // inject chaos
         window.__audioEnergy =
           this.energy * (1.0 + window.__visualEnergy);
 
@@ -619,7 +647,7 @@ void main(){
       mutate() {
         const aliveNodes = this.nodes.filter(n => n.alive);
 
-        if (aliveNodes.length < 4) return;
+        if (aliveNodes.length < 4 || this.nodes.length > 120) return;
 
         const victim = aliveNodes[Math.floor(Math.random() * aliveNodes.length)];
         victim.alive = false;
@@ -653,6 +681,17 @@ void main(){
       
       stop() {
         this.isPlaying = false;
+
+        // hard cleanup
+        this.activeVoices.forEach(v => {
+          try { v.stop(); } catch(e){}
+        });
+
+        this.activeVoices.clear();
+
+        if (this.audioContext) {
+          this.audioContext.suspend().catch(()=>{});
+        }
       }
     }
 
@@ -693,6 +732,9 @@ void main(){
     document.getElementById('regenBtn').addEventListener('click', function() {
       if (generator) {
         generator.stop();
+      }
+      if (generator && generator.audioContext) {
+        generator.audioContext.close().catch(()=>{});
       }
       generator = null;
       init();
