@@ -34,8 +34,6 @@
       touch-action: manipulation;
     }
 
-    
-
     h1 {
       font-size: 1.3em;
       margin-bottom: 1.6em;
@@ -113,19 +111,18 @@
 </head>
 <body>
   <canvas id="visual"></canvas>
-  <div id="container" ontouchstart="showUI()">
+  <div id="container">
     <h1>∿ квантовая фрактальная музыка ∿</h1>
     <div>
-      <button onclick="start()">коллапс</button>
-      <button onclick="stop()">стабилизация</button>
-      <button onclick="regenerate()">перерождение</button>
+      <button id="startBtn">коллапс</button>
+      <button id="stopBtn">стабилизация</button>
+      <button id="regenBtn">перерождение</button>
     </div>
     <div id="status">ожидание</div>
     <div id="info"></div>
   </div>
   <script>
     let generator = null;
-    let audioUnlocked = false;
 
     window.__audioEnergy = 0.2;
     window.__visualEnergy = 0.0;
@@ -540,15 +537,14 @@ void main(){
       play() {
         if (this.isPlaying) return;
 
-        // КРИТИЧНО: создаём AudioContext здесь
         if (!this.audioContext) {
           this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
         }
 
-        // Разблокируем контекст
-        if (this.audioContext.state === 'suspended') {
-          this.audioContext.resume();
-        }
+        // КРИТИЧНО для iOS
+        this.audioContext.resume().then(() => {
+          console.log('AudioContext resumed');
+        });
 
         this.isPlaying = true;
         this.generate();
@@ -670,39 +666,41 @@ void main(){
       document.getElementById('info').textContent = `узлов в поле: ${generator.nodes.length}`;
     }
 
-    // КЛЮЧЕВАЯ ФУНКЦИЯ для мобильных
-    function start() {
-      if (!generator) {
-        init();
-      }
+    // Инициализация при загрузке
+    init();
 
-      // Создаём AudioContext ВНУТРИ обработчика клика
+    // Кнопки
+    document.getElementById('startBtn').addEventListener('click', function() {
       if (!generator.audioContext) {
         generator.audioContext = new (window.AudioContext || window.webkitAudioContext)();
       }
+      
+      generator.audioContext.resume().then(() => {
+        generator.play();
+        showUI();
+        setTimeout(hideUI, 4000);
+        document.getElementById('status').textContent = 'квантовый коллапс активен';
+      });
+    });
 
-      generator.play();
-
-      showUI();
-      setTimeout(hideUI, 4000);
-
-      document.getElementById('status').textContent = 'квантовый коллапс активен';
-    }
-
-    function stop() {
+    document.getElementById('stopBtn').addEventListener('click', function() {
       if (generator) {
         generator.stop();
         document.getElementById('status').textContent = 'волновая функция стабилизирована';
       }
-    }
+    });
 
-    function regenerate() {
+    document.getElementById('regenBtn').addEventListener('click', function() {
       if (generator) {
         generator.stop();
       }
       generator = null;
       init();
-    }
+    });
+
+    // Касание экрана показывает UI
+    canvas.addEventListener('touchstart', showUI);
+    canvas.addEventListener('click', showUI);
 
     window.addEventListener('resize', () => {
       if (!canvas || !gl) return;
@@ -711,6 +709,6 @@ void main(){
       canvas.height = window.innerHeight;
       gl.viewport(0, 0, canvas.width, canvas.height);
     });
-</script>
+  </script>
 </body>
 </html>
