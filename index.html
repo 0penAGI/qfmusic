@@ -363,7 +363,7 @@ void main(){
         this.energy = 1.0;
 
         this.activeVoices = new Set(); // track playing sounds
-        this.maxVoices = 18; // softer polyphony = less harshness
+        this.maxVoices = 12; // softer polyphony = less harshness
         this.initQuantumField();
       }
       
@@ -590,6 +590,12 @@ void main(){
         verbDelay.connect(ctx.destination);
 
         this.activeVoices.add(osc);
+        setTimeout(() => {
+          try {
+            osc.disconnect();
+            gain.disconnect();
+          } catch(e){}
+        }, (duration + 0.5) * 1000);
 
         osc.onended = () => {
           this.activeVoices.delete(osc);
@@ -667,10 +673,10 @@ void main(){
 
         this.memory = this.memory
           .map(m => {
-            m.decay *= 0.96; // exponential forgetting
+            m.decay *= 0.9; // exponential forgetting
             return m;
           })
-          .filter(m => m.decay > 0.15);
+          .filter(m => m.decay > 0.3);
 
         if (this.memory.length > this.maxMemory) {
           this.memory.length = this.maxMemory;
