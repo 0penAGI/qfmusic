@@ -89,7 +89,7 @@
       top: 0;
       left: 0;
       z-index: 1;
-      pointer-events: none;
+      pointer-events: auto;
       filter: grayscale(1) contrast(1.1) brightness(1.2);
     }
 
@@ -116,15 +116,16 @@
   <div id="container" ontouchstart="showUI()">
     <h1>∿ квантовая фрактальная музыка ∿</h1>
     <div>
-      <button onclick="start()">коллапс</button>
-      <button onclick="stop()">стабилизация</button>
-      <button onclick="regenerate()">перерождение</button>
+      <button ontouchstart="start()" onclick="start()">коллапс</button>
+      <button ontouchstart="stop()" onclick="stop()">стабилизация</button>
+      <button ontouchstart="regenerate()" onclick="regenerate()">перерождение</button>
     </div>
     <div id="status">ожидание</div>
     <div id="info"></div>
   </div>
   
   <script>
+    document.body.addEventListener('touchstart', function () {}, { passive: true });
     window.__audioEnergy = 0.2;
     // visual feedback memory
     window.__visualEnergy = 0.0;
@@ -374,7 +375,7 @@ gl_FragColor = vec4(vec3(paint),0.22);
 
     class FractalMusicGenerator {
       constructor() {
-        this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        this.audioContext = null;
         this.nodes = [];
         this.baseFreq = 432;
         this.maxDepth = 5;
@@ -579,6 +580,16 @@ gl_FragColor = vec4(vec3(paint),0.22);
       
       play() {
         if (this.isPlaying) return;
+
+        // lazy init audio for mobile
+        if (!this.audioContext) {
+          this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        }
+
+        if (this.audioContext.state !== 'running') {
+          this.audioContext.resume().catch(()=>{});
+        }
+
         this.isPlaying = true;
         this.generate();
       }
@@ -697,15 +708,6 @@ gl_FragColor = vec4(vec3(paint),0.22);
     }
 
 let generator = null;
-
-function unlockAudio() {
-  if (generator && generator.audioContext && generator.audioContext.state === 'suspended') {
-    generator.audioContext.resume();
-  }
-}
-
-document.addEventListener('touchstart', unlockAudio);
-document.addEventListener('click', unlockAudio);
 
     function init() {
       generator = new FractalMusicGenerator();
