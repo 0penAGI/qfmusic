@@ -123,40 +123,11 @@
     <div id="status">ожидание</div>
     <div id="info"></div>
   </div>
-  
   <script>
     let generator = null;
     let audioUnlocked = false;
 
-    // Mobile-safe audio unlock
-    function unlockAudio() {
-      if (audioUnlocked) return;
-
-      if (!generator) {
-        generator = new FractalMusicGenerator();
-      }
-
-      if (!generator.audioContext) {
-        generator.audioContext = new (window.AudioContext || window.webkitAudioContext)();
-      }
-
-      // silent pulse (iOS / Android unlock)
-      const osc = generator.audioContext.createOscillator();
-      const gain = generator.audioContext.createGain();
-      gain.gain.value = 0;
-
-      osc.connect(gain);
-      gain.connect(generator.audioContext.destination);
-
-      osc.start();
-      osc.stop(generator.audioContext.currentTime + 0.01);
-
-      generator.audioContext.resume().catch(()=>{});
-
-      audioUnlocked = true;
-    }
     window.__audioEnergy = 0.2;
-    // visual feedback memory
     window.__visualEnergy = 0.0;
 
     const feedbackBuffer = new Uint8Array(4);
@@ -180,6 +151,7 @@
       window.__visualEnergy =
         window.__visualEnergy * 0.9 + v * 0.1;
     }
+    
     let uiHidden = false;
 
     function hideUI() {
@@ -202,12 +174,9 @@
       uiHidden = false;
     }
 
-    // auto-hide after 15s
     setTimeout(hideUI, 15000);
 
-    document.body.addEventListener('touchstart', unlockAudio, { once: true });
-    document.body.addEventListener('click', unlockAudio, { once: true });
-    // Визуализация (WebGL Audio-Reactive Shader)
+    // Визуализация
     const canvas = document.getElementById('visual');
     const gl = canvas.getContext('webgl');
 
@@ -252,12 +221,10 @@ void main(){
   float t = time*0.25;
   float e = clamp(energy,0.05,1.5);
 
-  // moving attractors
   vec2 a1 = vec2(sin(t*0.7),cos(t*0.9))*0.6;
   vec2 a2 = vec2(cos(t*1.1),sin(t*0.6))*0.5;
   vec2 a3 = vec2(sin(t*0.4+2.0),cos(t*0.5))*0.7;
 
-  // chaotic field
   vec2 v = vec2(0.0);
 
   v += attract(p,a1,0.8*e);
@@ -282,19 +249,13 @@ void main(){
 
   float grain = noise(p*12.0+t)*0.15;
 
-float paint = smoothstep(0.05,0.8,ink+grain);
+  float paint = smoothstep(0.05,0.8,ink+grain);
 
-// increase contrast
-paint = pow(paint, 0.75);
+  paint = pow(paint, 0.75);
+  paint *= 0.9 + e*2.0;
+  paint = clamp(paint * 1.8, 0.0, 1.0);
 
-// boost brightness with energy
-paint *= 0.9 + e*2.0;
-
-// push towards white
-paint = clamp(paint * 1.8, 0.0, 1.0);
-
-// brighter trails
-gl_FragColor = vec4(vec3(paint),0.22);
+  gl_FragColor = vec4(vec3(paint),0.22);
 }
 `;
 
@@ -336,12 +297,8 @@ gl_FragColor = vec4(vec3(paint),0.22);
     const uEnergy = gl.getUniformLocation(program, 'energy');
     const uRes = gl.getUniformLocation(program, 'resolution');
 
-    let lastTime = 0;
-
     function render(now) {
-
       const t = now * 0.001;
-
       const energy = window.__audioEnergy || 0.2;
 
       gl.uniform1f(uTime, t);
@@ -351,13 +308,11 @@ gl_FragColor = vec4(vec3(paint),0.22);
       gl.enable(gl.BLEND);
       gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
 
-      // slow fade for feedback-like trails
       gl.clearColor(0.0,0.0,0.0,0.018);
       gl.clear(gl.COLOR_BUFFER_BIT);
 
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
 
-      // read visual energy for audio feedback
       sampleVisualEnergy();
 
       requestAnimationFrame(render);
@@ -451,24 +406,22 @@ gl_FragColor = vec4(vec3(paint),0.22);
       }
       
       createOscillator(freq, duration, startTime) {
+        if (!this.audioContext) return;
+        
         const osc = this.audioContext.createOscillator();
         const gain = this.audioContext.createGain();
 
         const ctx = this.audioContext;
 
-        // visual influence
         const visual = window.__visualEnergy || 0.0;
 
-        // microtonal detune
         const micro = (Math.random() - 0.5) * 15 * visual;
         const tempered = freq * Math.pow(2, micro / 1200);
 
-        // main oscillator
         const waveforms = ['sine', 'triangle', 'sawtooth'];
         osc.type = waveforms[Math.floor(Math.random() * waveforms.length)];
         osc.frequency.value = tempered;
 
-        // sub bass layer
         const sub = ctx.createOscillator();
         sub.type = 'sine';
         sub.frequency.value = tempered * 0.5;
@@ -476,7 +429,6 @@ gl_FragColor = vec4(vec3(paint),0.22);
         const subGain = ctx.createGain();
         subGain.gain.value = 0.25 + visual * 0.2;
 
-        // spectral low overtone
         const overtone = ctx.createOscillator();
         overtone.type = 'sine';
         overtone.frequency.value = tempered * (0.6 + visual * 0.5);
@@ -484,7 +436,6 @@ gl_FragColor = vec4(vec3(paint),0.22);
         const overtoneGain = ctx.createGain();
         overtoneGain.gain.value = 0.07 * (1.0 + visual);
 
-        // granular shimmer (noise grain)
         const noise = ctx.createBufferSource();
         const buffer = ctx.createBuffer(1, ctx.sampleRate * 0.3, ctx.sampleRate);
         const data = buffer.getChannelData(0);
@@ -499,7 +450,6 @@ gl_FragColor = vec4(vec3(paint),0.22);
         const grainGain = ctx.createGain();
         grainGain.gain.value = 0.05 + visual * 0.08;
 
-        // envelope
         const attack = 0.05 + Math.random() * 0.15;
         const decay = 0.2 + Math.random() * 0.4;
         const sustain = 0.25 + visual * 0.25;
@@ -520,7 +470,6 @@ gl_FragColor = vec4(vec3(paint),0.22);
           startTime + duration
         );
 
-        // connections
         osc.connect(gain);
 
         sub.connect(subGain);
@@ -532,13 +481,11 @@ gl_FragColor = vec4(vec3(paint),0.22);
         noise.connect(grainGain);
         grainGain.connect(gain);
 
-        // lowpass (bass focus)
         const filter = ctx.createBiquadFilter();
         filter.type = 'lowpass';
         filter.frequency.setValueAtTime(800, startTime);
         filter.Q.value = 1.1;
 
-        // tape echo
         const delay = ctx.createDelay();
         delay.delayTime.value = 0.22 + Math.random() * 0.18;
 
@@ -549,7 +496,6 @@ gl_FragColor = vec4(vec3(paint),0.22);
         tapeFilter.type = 'lowpass';
         tapeFilter.frequency.value = 1800;
 
-        // cavern reverb (multi-delay)
         const verbDelay = ctx.createDelay();
         verbDelay.delayTime.value = 0.45 + Math.random() * 0.25;
 
@@ -562,14 +508,11 @@ gl_FragColor = vec4(vec3(paint),0.22);
         const dry = ctx.createGain();
         dry.gain.value = 0.65;
 
-        // routing
         gain.connect(filter);
 
-        // dry
         filter.connect(dry);
         dry.connect(ctx.destination);
 
-        // tape echo loop
         filter.connect(delay);
         delay.connect(tapeFilter);
         tapeFilter.connect(tapeFeedback);
@@ -577,20 +520,17 @@ gl_FragColor = vec4(vec3(paint),0.22);
 
         delay.connect(wet);
 
-        // reverb loop
         wet.connect(verbDelay);
         verbDelay.connect(verbFeedback);
         verbFeedback.connect(verbDelay);
 
         verbDelay.connect(ctx.destination);
 
-        // start
         osc.start(startTime);
         sub.start(startTime);
         overtone.start(startTime);
         noise.start(startTime);
 
-        // stop
         osc.stop(startTime + duration);
         sub.stop(startTime + duration);
         overtone.stop(startTime + duration);
@@ -600,34 +540,25 @@ gl_FragColor = vec4(vec3(paint),0.22);
       play() {
         if (this.isPlaying) return;
 
+        // КРИТИЧНО: создаём AudioContext здесь
         if (!this.audioContext) {
           this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
         }
 
-        this.audioContext.resume().catch(()=>{});
+        // Разблокируем контекст
+        if (this.audioContext.state === 'suspended') {
+          this.audioContext.resume();
+        }
 
         this.isPlaying = true;
-
-        // tiny silent unlock pulse (iOS fix)
-        const osc = this.audioContext.createOscillator();
-        const g = this.audioContext.createGain();
-        g.gain.value = 0.0001;
-
-        osc.connect(g);
-        g.connect(this.audioContext.destination);
-
-        osc.start();
-        osc.stop(this.audioContext.currentTime + 0.02);
-
         this.generate();
       }
       
       generate() {
-        if (!this.isPlaying) return;
+        if (!this.isPlaying || !this.audioContext) return;
 
         const now = this.audioContext.currentTime;
 
-        // weighted choice using memory
         let activeNode;
         if (this.memory.length > 0 && Math.random() < 0.6) {
           activeNode = this.memory[Math.floor(Math.random() * this.memory.length)].node;
@@ -659,7 +590,6 @@ gl_FragColor = vec4(vec3(paint),0.22);
           }
         });
 
-        // store experience
         this.memory.push({
           node: activeNode,
           energy: localEnergy,
@@ -670,12 +600,10 @@ gl_FragColor = vec4(vec3(paint),0.22);
           this.memory.shift();
         }
 
-        // adapt global energy
         this.energy = this.energy * 0.95 + localEnergy * 0.05;
         window.__audioEnergy =
           this.energy * (1.0 + window.__visualEnergy);
 
-        // adaptive interval
         const nextInterval =
           180 +
           Math.random() * 700 *
@@ -685,7 +613,6 @@ gl_FragColor = vec4(vec3(paint),0.22);
 
         this.time += nextInterval;
 
-        // evolutionary pressure
         if (this.energy < 0.2 && Math.random() > 0.7) {
           this.mutate();
         } else if (Math.random() > 0.97) {
@@ -698,11 +625,9 @@ gl_FragColor = vec4(vec3(paint),0.22);
 
         if (aliveNodes.length < 4) return;
 
-        // remove weak node
         const victim = aliveNodes[Math.floor(Math.random() * aliveNodes.length)];
         victim.alive = false;
 
-        // reproduce strong node
         let parent = aliveNodes[0];
         let bestEnergy = -1;
 
@@ -735,19 +660,26 @@ gl_FragColor = vec4(vec3(paint),0.22);
       }
     }
 
-
     function init() {
-      generator = new FractalMusicGenerator();
+      if (!generator) {
+        generator = new FractalMusicGenerator();
+      }
       generator.memory = [];
       generator.energy = 1.0;
       document.getElementById('status').textContent = 'система инициализирована';
       document.getElementById('info').textContent = `узлов в поле: ${generator.nodes.length}`;
     }
 
+    // КЛЮЧЕВАЯ ФУНКЦИЯ для мобильных
     function start() {
-      unlockAudio();
+      if (!generator) {
+        init();
+      }
 
-      if (!generator) init();
+      // Создаём AudioContext ВНУТРИ обработчика клика
+      if (!generator.audioContext) {
+        generator.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      }
 
       generator.play();
 
@@ -768,9 +700,10 @@ gl_FragColor = vec4(vec3(paint),0.22);
       if (generator) {
         generator.stop();
       }
+      generator = null;
       init();
     }
-    // fix mobile resize / rotation (inside script scope)
+
     window.addEventListener('resize', () => {
       if (!canvas || !gl) return;
 
@@ -778,6 +711,6 @@ gl_FragColor = vec4(vec3(paint),0.22);
       canvas.height = window.innerHeight;
       gl.viewport(0, 0, canvas.width, canvas.height);
     });
-  </script>
+</script>
 </body>
 </html>
