@@ -126,6 +126,7 @@
 
     window.__audioEnergy = 0.2;
     window.__visualEnergy = 0.0;
+    window.__smoothedEnergy = 0.2;
 
     const feedbackBuffer = new Uint8Array(4);
 
@@ -246,13 +247,13 @@ void main(){
 
   float grain = noise(p*12.0+t)*0.15;
 
-  float paint = smoothstep(0.05,0.8,ink+grain);
+  float paint = smoothstep(0.02,0.9,ink+grain);
 
   paint = pow(paint, 0.75);
-  paint *= 0.9 + e*2.0;
+  paint *= 1.1 + e*2.4;
   paint = clamp(paint * 1.8, 0.0, 1.0);
 
-  gl_FragColor = vec4(vec3(paint),0.22);
+  gl_FragColor = vec4(vec3(paint),0.18);
 }
 `;
 
@@ -296,16 +297,21 @@ void main(){
 
     function render(now) {
       const t = now * 0.001;
-      const energy = window.__audioEnergy || 0.2;
+      window.__smoothedEnergy =
+        window.__smoothedEnergy * 0.92 +
+        (window.__audioEnergy || 0.2) * 0.08;
+
+      const energy = window.__smoothedEnergy;
 
       gl.uniform1f(uTime, t);
       gl.uniform1f(uEnergy, energy);
       gl.uniform2f(uRes, canvas.width, canvas.height);
 
       gl.enable(gl.BLEND);
-      gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+      gl.lineWidth(1.0);
+      gl.blendFunc(gl.SRC_ALPHA, gl.ONE);
 
-      gl.clearColor(0.0,0.0,0.0,0.018);
+      gl.clearColor(0.0,0.0,0.0,0.045);
       gl.clear(gl.COLOR_BUFFER_BIT);
 
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
