@@ -125,7 +125,21 @@
   </div>
   
   <script>
-    document.body.addEventListener('touchstart', function () {}, { passive: true });
+    let __audioUnlocked = false;
+
+    function unlockAudioMobile() {
+      if (!generator) init();
+
+      if (generator && !generator.audioContext) {
+        generator.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      }
+
+      if (generator && generator.audioContext && generator.audioContext.state !== 'running') {
+        generator.audioContext.resume().catch(()=>{});
+      }
+
+      __audioUnlocked = true;
+    }
     window.__audioEnergy = 0.2;
     // visual feedback memory
     window.__visualEnergy = 0.0;
@@ -176,18 +190,30 @@
     // auto-hide after 15s
     setTimeout(hideUI, 15000);
 
-    // tap anywhere to toggle UI (mobile)
+    // tap anywhere to unlock audio and toggle UI (mobile)
     document.addEventListener('touchstart', () => {
+      unlockAudioMobile();
+
       if (uiHidden) {
         showUI();
       }
-    });
+    }, { once: true });
+
+    document.addEventListener('pointerdown', () => {
+      unlockAudioMobile();
+
+      if (uiHidden) {
+        showUI();
+      }
+    }, { once: true });
 
     document.addEventListener('click', () => {
+      unlockAudioMobile();
+
       if (uiHidden) {
         showUI();
       }
-    });
+    }, { once: true });
     // Визуализация (WebGL Audio-Reactive Shader)
     const canvas = document.getElementById('visual');
     const gl = canvas.getContext('webgl');
@@ -581,16 +607,25 @@ gl_FragColor = vec4(vec3(paint),0.22);
       play() {
         if (this.isPlaying) return;
 
-        // lazy init audio for mobile
         if (!this.audioContext) {
           this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
         }
 
-        if (this.audioContext.state !== 'running') {
-          this.audioContext.resume().catch(()=>{});
-        }
+        this.audioContext.resume().catch(()=>{});
 
         this.isPlaying = true;
+
+        // tiny silent unlock pulse (iOS fix)
+        const osc = this.audioContext.createOscillator();
+        const g = this.audioContext.createGain();
+        g.gain.value = 0.0001;
+
+        osc.connect(g);
+        g.connect(this.audioContext.destination);
+
+        osc.start();
+        osc.stop(this.audioContext.currentTime + 0.02);
+
         this.generate();
       }
       
@@ -720,10 +755,7 @@ let generator = null;
     function start() {
       if (!generator) init();
 
-      // mobile-safe audio unlock
-      if (generator.audioContext && generator.audioContext.state !== 'running') {
-        generator.audioContext.resume().catch(()=>{});
-      }
+      unlockAudioMobile();
 
       generator.play();
 
