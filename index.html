@@ -472,35 +472,17 @@ void main(){
         const grainGain = ctx.createGain();
         grainGain.gain.value = 0.05 + visual * 0.08;
 
-        // smoother ADSR
-        const attack = 0.08 + Math.random() * 0.25;
-        const decay = 0.3 + Math.random() * 0.6;
-        const sustain = 0.18 + visual * 0.25;
-        const release = 0.6 + Math.random() * 1.2;
-
-        // soft exponential envelope
-        gain.gain.cancelScheduledValues(startTime);
-        gain.gain.setValueAtTime(0.0001, startTime);
-
-        gain.gain.exponentialRampToValueAtTime(
-          0.35,
-          startTime + attack
-        );
-
-        gain.gain.exponentialRampToValueAtTime(
-          Math.max(sustain, 0.05),
-          startTime + attack + decay
-        );
-
-        gain.gain.setValueAtTime(
-          Math.max(sustain, 0.05),
-          startTime + duration - release
-        );
-
-        gain.gain.exponentialRampToValueAtTime(
-          0.0001,
-          startTime + duration
-        );
+        // --- NEW: Mobile-safe ADSR envelope ---
+        const amp = 0.35;
+        const now = this.audioContext.currentTime;
+        // reset gain
+        gain.gain.cancelScheduledValues(now);
+        gain.gain.setValueAtTime(0.0001, now);
+        // ADSR (safe for mobile)
+        gain.gain.linearRampToValueAtTime(amp, now + 0.15);        // Attack
+        gain.gain.linearRampToValueAtTime(amp * 0.7, now + 0.4);   // Decay/Sustain
+        gain.gain.linearRampToValueAtTime(0.0001, now + duration); // Release
+        // --- END ADSR ---
 
         osc.connect(gain);
 
@@ -601,6 +583,7 @@ void main(){
           this.activeVoices.delete(osc);
         };
 
+        // Start oscillators AFTER envelope
         osc.start(startTime);
         sub.start(startTime);
         overtone.start(startTime);
@@ -628,16 +611,15 @@ void main(){
         osc.start();
         osc.stop(this.audioContext.currentTime + 0.02);
 
-        this.audioContext.resume().then(() => {
-          this.isPlaying = true;
+        this.audioContext.resume();
+        this.isPlaying = true;
 
-          // small warmup before generate
-          setTimeout(() => {
-            if (this.isPlaying) {
-              this.generate();
-            }
-          }, 80);
-        });
+        // small warmup before generate
+        setTimeout(() => {
+          if (this.isPlaying) {
+            this.generate();
+          }
+        }, 80);
       }
       
       generate() {
