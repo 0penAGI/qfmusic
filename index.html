@@ -366,6 +366,7 @@ void main(){
         this.maxVoices = 12; // softer polyphony = less harshness
         this.bufferCache = new Map();
         this.maxCacheSize = 20;
+        this.masterCompressor = null;
         this.initQuantumField();
       }
       
@@ -457,6 +458,28 @@ void main(){
         const osc = this.audioContext.createOscillator();
         const gain = this.audioContext.createGain();
 
+        // --- 4D auto-pan + phase motion ---
+        const panner = ctx.createStereoPanner();
+        panner.pan.value = (Math.random() * 2 - 1) * 0.5;
+
+        const panLFO = ctx.createOscillator();
+        const panLFOGain = ctx.createGain();
+
+        panLFO.type = 'sine';
+        panLFO.frequency.value = 0.02 + Math.random() * 0.12; // slow orbital motion
+        panLFOGain.gain.value = 0.4 + Math.random() * 0.3;
+
+        panLFO.connect(panLFOGain);
+        panLFOGain.connect(panner.pan);
+        panLFO.start();
+
+        // --- spectral panorama EQ ---
+        const spatialEQ = ctx.createBiquadFilter();
+        spatialEQ.type = 'peaking';
+        spatialEQ.frequency.value = 800 + Math.random() * 1800;
+        spatialEQ.Q.value = 0.6 + Math.random() * 1.2;
+        spatialEQ.gain.value = (Math.random() - 0.5) * 6;
+
         const ctx = this.audioContext;
 
         const visual = window.__visualEnergy || 0.0;
@@ -509,6 +532,9 @@ void main(){
         // --- END ADSR ---
 
         osc.connect(gain);
+        gain.connect(panner);
+        panner.connect(spatialEQ);
+        spatialEQ.connect(highCut);
 
         sub.connect(subGain);
         subGain.connect(gain);
@@ -560,6 +586,13 @@ void main(){
         const verbDelay = ctx.createDelay();
         verbDelay.delayTime.value = 0.45 + Math.random() * 0.25;
 
+        // --- secondary deep-space reverb ---
+        const verbDelay2 = ctx.createDelay();
+        verbDelay2.delayTime.value = 0.9 + Math.random() * 0.6;
+
+        const verbFeedback2 = ctx.createGain();
+        verbFeedback2.gain.value = 0.4 + Math.random() * 0.25;
+
         const verbFeedback = ctx.createGain();
         verbFeedback.gain.value = 0.6 + visual * 0.2;
 
@@ -575,12 +608,11 @@ void main(){
         highCut.frequency.value = 1800;
         highCut.Q.value = 0.7;
 
-        gain.connect(highCut);
         highCut.connect(shaper);
         shaper.connect(filter);
 
         filter.connect(dry);
-        dry.connect(ctx.destination);
+        dry.connect(this.masterCompressor || ctx.destination);
 
         filter.connect(delay);
         delay.connect(tapeFilter);
@@ -593,13 +625,23 @@ void main(){
         verbDelay.connect(verbFeedback);
         verbFeedback.connect(verbDelay);
 
-        verbDelay.connect(ctx.destination);
+        // parallel deep reverb
+        wet.connect(verbDelay2);
+        verbDelay2.connect(verbFeedback2);
+        verbFeedback2.connect(verbDelay2);
+
+        verbDelay.connect(this.masterCompressor || ctx.destination);
+        verbDelay2.connect(this.masterCompressor || ctx.destination);
 
         this.activeVoices.add(osc);
         setTimeout(() => {
           try {
             osc.disconnect();
             gain.disconnect();
+            panner.disconnect();
+            spatialEQ.disconnect();
+            panLFO.disconnect();
+            panLFOGain.disconnect();
           } catch(e){}
         }, (duration + 0.5) * 1000);
 
@@ -641,6 +683,14 @@ void main(){
         osc.stop(this.audioContext.currentTime + 0.02);
 
         this.audioContext.resume();
+        const compressor = this.audioContext.createDynamicsCompressor();
+        compressor.threshold.value = -24;
+        compressor.knee.value = 12;
+        compressor.ratio.value = 3;
+        compressor.attack.value = 0.003;
+        compressor.release.value = 0.25;
+        this.masterCompressor = compressor;
+        this.masterCompressor.connect(this.audioContext.destination);
         this.isPlaying = true;
 
         // small warmup before generate
