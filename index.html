@@ -364,6 +364,8 @@ void main(){
 
         this.activeVoices = new Set(); // track playing sounds
         this.maxVoices = 12; // softer polyphony = less harshness
+        this.bufferCache = new Map();
+        this.maxCacheSize = 20;
         this.initQuantumField();
       }
       
@@ -411,6 +413,36 @@ void main(){
         });
       }
       
+      getNoiseBuffer(ctx) {
+        const key = `noise_${Math.floor(this.time / 10000)}`;
+
+        if (this.bufferCache.has(key)) {
+          return this.bufferCache.get(key);
+        }
+
+        const grainSize = 0.05 + Math.random() * 0.1;
+        const buffer = ctx.createBuffer(1, ctx.sampleRate * grainSize, ctx.sampleRate);
+        const data = buffer.getChannelData(0);
+
+        for (let i = 0; i < data.length; i++) {
+          const t = i / data.length;
+          const env = Math.sin(Math.PI * t);
+          const white = Math.random() * 2 - 1;
+          const prev = i > 0 ? data[i - 1] : 0;
+          const brown = (prev + white * 0.02) / 1.02;
+          data[i] = (white * 0.6 + brown * 0.4) * env * 0.15;
+        }
+
+        this.bufferCache.set(key, buffer);
+
+        if (this.bufferCache.size > this.maxCacheSize) {
+          const firstKey = this.bufferCache.keys().next().value;
+          this.bufferCache.delete(firstKey);
+        }
+
+        return buffer;
+      }
+
       createOscillator(freq, duration, startTime) {
         if (!this.audioContext) return;
         
@@ -455,18 +487,7 @@ void main(){
         overtoneGain.gain.value = 0.03 + Math.random()*0.06 * (1.0 + visual);
 
         const noise = ctx.createBufferSource();
-        const buffer = ctx.createBuffer(1, ctx.sampleRate * 0.3, ctx.sampleRate);
-        const data = buffer.getChannelData(0);
-
-        for (let i = 0; i < data.length; i++) {
-          // hybrid noise: white + brown
-          const white = Math.random()*2-1;
-          const prev = i>0 ? data[i-1] : 0;
-          const brown = (prev + white*0.02) / 1.02;
-          data[i] = (white*0.6 + brown*0.4) * 0.2;
-        }
-
-        noise.buffer = buffer;
+        noise.buffer = this.getNoiseBuffer(ctx);
         noise.loop = true;
 
         const grainGain = ctx.createGain();
@@ -588,6 +609,11 @@ void main(){
 
         // Start oscillators AFTER envelope
         osc.start(startTime);
+        const driftAmount = (Math.random() - 0.5) * 8; // ±8 cents
+        osc.detune.linearRampToValueAtTime(
+          osc.detune.value + driftAmount,
+          startTime + duration
+        );
         sub.start(startTime);
         overtone.start(startTime);
         noise.start(startTime);
