@@ -457,28 +457,8 @@ void main(){
         }
         const osc = this.audioContext.createOscillator();
         const gain = this.audioContext.createGain();
-
-        // --- 4D auto-pan + phase motion ---
         const panner = ctx.createStereoPanner();
-        panner.pan.value = (Math.random() * 2 - 1) * 0.5;
-
-        const panLFO = ctx.createOscillator();
-        const panLFOGain = ctx.createGain();
-
-        panLFO.type = 'sine';
-        panLFO.frequency.value = 0.02 + Math.random() * 0.12; // slow orbital motion
-        panLFOGain.gain.value = 0.4 + Math.random() * 0.3;
-
-        panLFO.connect(panLFOGain);
-        panLFOGain.connect(panner.pan);
-        panLFO.start();
-
-        // --- spectral panorama EQ ---
-        const spatialEQ = ctx.createBiquadFilter();
-        spatialEQ.type = 'peaking';
-        spatialEQ.frequency.value = 800 + Math.random() * 1800;
-        spatialEQ.Q.value = 0.6 + Math.random() * 1.2;
-        spatialEQ.gain.value = (Math.random() - 0.5) * 6;
+        panner.pan.value = (Math.random() * 2 - 1) * 0.7;
 
         const ctx = this.audioContext;
 
@@ -533,8 +513,7 @@ void main(){
 
         osc.connect(gain);
         gain.connect(panner);
-        panner.connect(spatialEQ);
-        spatialEQ.connect(highCut);
+        panner.connect(highCut);
 
         sub.connect(subGain);
         subGain.connect(gain);
@@ -586,13 +565,6 @@ void main(){
         const verbDelay = ctx.createDelay();
         verbDelay.delayTime.value = 0.45 + Math.random() * 0.25;
 
-        // --- secondary deep-space reverb ---
-        const verbDelay2 = ctx.createDelay();
-        verbDelay2.delayTime.value = 0.9 + Math.random() * 0.6;
-
-        const verbFeedback2 = ctx.createGain();
-        verbFeedback2.gain.value = 0.4 + Math.random() * 0.25;
-
         const verbFeedback = ctx.createGain();
         verbFeedback.gain.value = 0.6 + visual * 0.2;
 
@@ -625,23 +597,13 @@ void main(){
         verbDelay.connect(verbFeedback);
         verbFeedback.connect(verbDelay);
 
-        // parallel deep reverb
-        wet.connect(verbDelay2);
-        verbDelay2.connect(verbFeedback2);
-        verbFeedback2.connect(verbDelay2);
-
         verbDelay.connect(this.masterCompressor || ctx.destination);
-        verbDelay2.connect(this.masterCompressor || ctx.destination);
 
         this.activeVoices.add(osc);
         setTimeout(() => {
           try {
             osc.disconnect();
             gain.disconnect();
-            panner.disconnect();
-            spatialEQ.disconnect();
-            panLFO.disconnect();
-            panLFOGain.disconnect();
           } catch(e){}
         }, (duration + 0.5) * 1000);
 
