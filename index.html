@@ -364,6 +364,7 @@ void main(){
 
         this.activeVoices = new Set(); // track playing sounds
         this.maxVoices = 12; // softer polyphony = less harshness
+        this.masterCompressor = null;
         this.initQuantumField();
       }
       
@@ -424,8 +425,9 @@ void main(){
         }
         const osc = this.audioContext.createOscillator();
         const gain = this.audioContext.createGain();
-
         const ctx = this.audioContext;
+        const panner = ctx.createStereoPanner();
+        panner.pan.value = (Math.random() * 2 - 1) * 0.7;
 
         const visual = window.__visualEnergy || 0.0;
 
@@ -488,6 +490,8 @@ void main(){
         // --- END ADSR ---
 
         osc.connect(gain);
+        gain.connect(panner);
+        panner.connect(highCut);
 
         sub.connect(subGain);
         subGain.connect(gain);
@@ -559,7 +563,7 @@ void main(){
         shaper.connect(filter);
 
         filter.connect(dry);
-        dry.connect(ctx.destination);
+        dry.connect(this.masterCompressor || ctx.destination);
 
         filter.connect(delay);
         delay.connect(tapeFilter);
@@ -572,7 +576,7 @@ void main(){
         verbDelay.connect(verbFeedback);
         verbFeedback.connect(verbDelay);
 
-        verbDelay.connect(ctx.destination);
+        verbDelay.connect(this.masterCompressor || ctx.destination);
 
         this.activeVoices.add(osc);
         setTimeout(() => {
@@ -588,6 +592,11 @@ void main(){
 
         // Start oscillators AFTER envelope
         osc.start(startTime);
+        const driftAmount = (Math.random() - 0.5) * 8;
+        osc.detune.linearRampToValueAtTime(
+          osc.detune.value + driftAmount,
+          startTime + duration
+        );
         sub.start(startTime);
         overtone.start(startTime);
         noise.start(startTime);
@@ -615,6 +624,16 @@ void main(){
         osc.stop(this.audioContext.currentTime + 0.02);
 
         this.audioContext.resume();
+        const compressor = this.audioContext.createDynamicsCompressor();
+
+        compressor.threshold.value = -24;
+        compressor.knee.value = 12;
+        compressor.ratio.value = 3;
+        compressor.attack.value = 0.003;
+        compressor.release.value = 0.25;
+
+        this.masterCompressor = compressor;
+        this.masterCompressor.connect(this.audioContext.destination);
         this.isPlaying = true;
 
         // small warmup before generate
