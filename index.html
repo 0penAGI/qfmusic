@@ -366,7 +366,6 @@ void main(){
         this.maxVoices = 12; // softer polyphony = less harshness
         this.bufferCache = new Map();
         this.maxCacheSize = 20;
-        this.masterCompressor = null;
         this.initQuantumField();
       }
       
@@ -457,8 +456,6 @@ void main(){
         }
         const osc = this.audioContext.createOscillator();
         const gain = this.audioContext.createGain();
-        const panner = ctx.createStereoPanner();
-        panner.pan.value = (Math.random() * 2 - 1) * 0.7;
 
         const ctx = this.audioContext;
 
@@ -512,8 +509,6 @@ void main(){
         // --- END ADSR ---
 
         osc.connect(gain);
-        gain.connect(panner);
-        panner.connect(highCut);
 
         sub.connect(subGain);
         subGain.connect(gain);
@@ -580,11 +575,12 @@ void main(){
         highCut.frequency.value = 1800;
         highCut.Q.value = 0.7;
 
+        gain.connect(highCut);
         highCut.connect(shaper);
         shaper.connect(filter);
 
         filter.connect(dry);
-        dry.connect(this.masterCompressor || ctx.destination);
+        dry.connect(ctx.destination);
 
         filter.connect(delay);
         delay.connect(tapeFilter);
@@ -597,7 +593,7 @@ void main(){
         verbDelay.connect(verbFeedback);
         verbFeedback.connect(verbDelay);
 
-        verbDelay.connect(this.masterCompressor || ctx.destination);
+        verbDelay.connect(ctx.destination);
 
         this.activeVoices.add(osc);
         setTimeout(() => {
@@ -645,14 +641,6 @@ void main(){
         osc.stop(this.audioContext.currentTime + 0.02);
 
         this.audioContext.resume();
-        const compressor = this.audioContext.createDynamicsCompressor();
-        compressor.threshold.value = -24;
-        compressor.knee.value = 12;
-        compressor.ratio.value = 3;
-        compressor.attack.value = 0.003;
-        compressor.release.value = 0.25;
-        this.masterCompressor = compressor;
-        this.masterCompressor.connect(this.audioContext.destination);
         this.isPlaying = true;
 
         // small warmup before generate
