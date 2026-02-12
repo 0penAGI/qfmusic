@@ -456,8 +456,6 @@ void main(){
         }
         const osc = this.audioContext.createOscillator();
         const gain = this.audioContext.createGain();
-        const panner = ctx.createStereoPanner();
-        panner.pan.value = (Math.random() * 2 - 1) * 0.8;
 
         const ctx = this.audioContext;
 
@@ -511,8 +509,6 @@ void main(){
         // --- END ADSR ---
 
         osc.connect(gain);
-        gain.connect(panner);
-        panner.connect(highCut);
 
         sub.connect(subGain);
         subGain.connect(gain);
