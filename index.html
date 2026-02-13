@@ -414,7 +414,7 @@ void main(){
       }
       
       getNoiseBuffer(ctx) {
-        const key = `noise_${Math.floor(this.time / 10000)}`;
+        const key = `n_${Math.floor(this.time / 30000) % 8}`;
 
         if (this.bufferCache.has(key)) {
           return this.bufferCache.get(key);
@@ -456,8 +456,9 @@ void main(){
         }
         const osc = this.audioContext.createOscillator();
         const gain = this.audioContext.createGain();
-
         const ctx = this.audioContext;
+        const panner = ctx.createStereoPanner();
+        panner.pan.value = (Math.random() * 2 - 1) * 0.8;
 
         const visual = window.__visualEnergy || 0.0;
 
@@ -509,6 +510,13 @@ void main(){
         // --- END ADSR ---
 
         osc.connect(gain);
+        gain.connect(panner);
+        // global high-cut safety filter
+        const highCut = ctx.createBiquadFilter();
+        highCut.type = 'lowpass';
+        highCut.frequency.value = 1800;
+        highCut.Q.value = 0.7;
+        panner.connect(highCut);
 
         sub.connect(subGain);
         subGain.connect(gain);
@@ -569,13 +577,6 @@ void main(){
         const dry = ctx.createGain();
         dry.gain.value = 0.65;
 
-        // global high-cut safety filter
-        const highCut = ctx.createBiquadFilter();
-        highCut.type = 'lowpass';
-        highCut.frequency.value = 1800;
-        highCut.Q.value = 0.7;
-
-        gain.connect(highCut);
         highCut.connect(shaper);
         shaper.connect(filter);
 
@@ -596,16 +597,22 @@ void main(){
         verbDelay.connect(ctx.destination);
 
         this.activeVoices.add(osc);
-        setTimeout(() => {
+
+        // Cleanup logic for audio nodes
+        const cleanup = () => {
           try {
             osc.disconnect();
             gain.disconnect();
+            panner?.disconnect();
+            filter?.disconnect();
+            delay?.disconnect();
+            verbDelay?.disconnect();
           } catch(e){}
-        }, (duration + 0.5) * 1000);
 
-        osc.onended = () => {
           this.activeVoices.delete(osc);
         };
+
+        osc.onended = cleanup;
 
         // Start oscillators AFTER envelope
         osc.start(startTime);
