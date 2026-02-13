@@ -596,14 +596,14 @@ void main(){
         verbDelay.connect(ctx.destination);
 
         this.activeVoices.add(osc);
-        setTimeout(() => {
+
+        osc.onended = () => {
           try {
             osc.disconnect();
             gain.disconnect();
+            panner?.disconnect();
           } catch(e){}
-        }, (duration + 0.5) * 1000);
 
-        osc.onended = () => {
           this.activeVoices.delete(osc);
         };
 
